@@ -1,0 +1,216 @@
+openapi: "3.0.1"
+info:
+  title: "Job Test API for assignment"
+  description: "API to handle Jobs objects of the Core Platform"
+  version: "2022-08-16 00:00:00UTC"
+servers:
+  - url: "https://projects.test.api.goldspot.ca"
+tags:
+  - name: Jobs
+    description: Jobs are the async tasks to be performed by different services. They generaly imply a cost
+paths:
+  /goldspot/common/jobstest:
+    parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 100
+        description: the maximum number of items to return.
+      - in: query
+        name: offset_token
+        schema:
+          type: string
+        description: the `next_offset_token` from previous page. use for pagination
+      - in: query
+        name: user
+        schema:
+          type: string
+        description: Filter. Returns only jobs created by this user.
+      - in: query
+        name: type
+        schema:
+          type: string
+          default: tessellation.predict
+        description: Filter. Returns only jobs of this type. It is forced in th backend to be of type `tessellation.predict`
+    get:
+      summary: Get Jobs belonging to a project.
+      operationId: getJobsByProject
+      tags:
+        - Jobs
+      description: Request a a list of jobs related to a project. For the excersise it is limited to one company (`golspot`) an one project (`common`)
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/job"
+                  next_offset_token:
+                    type: string
+                    description: the token to be use for next page for pagination. If not provided, it is the end of the list.
+                    example: job.2022.08.01.01.01.01.111.000
+        "400":
+          example:
+            application/json: { "message": "WHATEVER" }
+          $ref: "#/components/responses/400BadRequest"
+      security:
+        - GolsSpotAuth: []
+components:
+  parameters:
+    company:
+      name: company
+      in: "path"
+      description: "Company unique ID that users belong to"
+      example: "goldspot"
+      required: true
+      schema:
+        type: "string"
+    project:
+      name: project
+      in: "path"
+      description: "Generated path parameter for name"
+      example: "common"
+      required: true
+      schema:
+        type: "string"
+  schemas:
+    common_model:
+      type: object
+      description: common properties to all objects
+      properties:
+        id:
+          type: string
+          description: The unique id of the object
+          example: 'job.2022.04.15.03.56.36.197.50167'
+        company:
+          type: string
+          description: The company name (id) the job belongs to.
+        project: # for now is name > sort key of DynamoDB
+          type: string
+          description: The inmutable id of the project the jobs belong to. Unique within a companies projects.
+          pattern: ^[a-zA-z0-9_-]+$
+        createdAt:
+          type: string
+          pattern: \d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z)
+          description: The ISO timestamp when the project object was created
+        updatedAt:
+          type: string
+          pattern: \d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z)
+          description: The ISO timestamp when the project object was updated
+        createdBy:
+          type: string
+          description: the username that created the object
+        updatedBy:
+          type: string
+          description: the username that updated the object last
+    job:
+      allOf:
+        - $ref: "#/components/schemas/common_model"
+        - type: object
+          description: A single job object
+          example:
+            {
+              company: "goldspot",
+              project: "some-id",
+              title: "The Job Custom Title",
+              createdAt: "2022-04-08T17:49:40.326Z",
+              updatedAt: "2022-04-08T17:44:05.532Z",
+              createdBy: "username",
+              updatedBy: "username",
+              status: "todo",
+              # deleted: false, # not to be returned?
+            }
+          required:
+            - id
+            - company
+            - project
+            - createdAt
+            - createdBy
+            - type
+            - status
+            - requestBody
+          properties:
+            title:
+              type: string
+              description: A changable display name/description of the job
+            type:
+              type: string
+              description: The target service Script/Product of this job. Limited to the namespace
+              enum:
+                - tessellation.predict
+            size:
+              type: string
+              description: the size of the job calculated based on the input required by the target service
+            finishedTime:
+              type: string
+              description: the time between CreatedAt and FinishedAt. The time the job took to finish.
+              example: 0:00:03.619000
+            cost:
+              type: number
+              description: The cost of this job. This is calculated by multiplying the `time`, the `size` and the `type` rate of the job
+            status:
+              type: string
+              description: The stage the job is at. When initiatied, status will be "requested". When the job is sent to the corresponding service it will be set to "in progress". When the service responds, independently of the result, it will be set to "done". If the job cannot be perform, it will be set to "cancelled", for example, when there is a lack of funds
+              enum:
+                - todo
+                - requested
+                - in progress
+                - cancelled
+                - done
+            requestBody:
+              type: string
+              description: The S3 key of the file that stores a copy of the full JSON body passed to the service
+              example: 's3/path/key/to/file'
+            requestMetadata:
+              type: object
+              description: Metadata added to the job. Used for example by the front end for storing extra information. Also used to stor simple parts of the original request.
+            responseCode:
+              type: integer
+              description: the response code of the swervice worker
+              example: 200
+            responseBody:
+              type: string
+              description: The S3 key of the file that stores a copy of the full JSON body returned as a response from service
+              example: 's3/path/key/to/file'
+            finishedAt:
+              type: string
+              pattern: \d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z)
+              description: The ISO timestamp when the job was done. Cancelled jobs will not have this property`
+  responses:
+    200Success:
+      description: Success
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                example: A message confirming success
+    400BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                description: An error message
+                example: Message explaining the error
+  securitySchemes:
+    GolsSpotAuth:
+      type: apiKey
+      name: Authorization
+      in: header
+      description: Obtain the API Key from the test request
