@@ -7,7 +7,7 @@ const ACTIONS = {
   ERROR: 'error',
 }
 
-const JOBS_API = 'https://projects.test.api.goldspot.ca'
+const JOBS_API = 'https://projects.test.api.goldspot.ca/goldspot/common/jobstest'
 
 //Use reducer to handle all the different states
 function reducer(state, action) {
@@ -35,6 +35,9 @@ export default function useFetchJobs(params, page) {
     //Call API
     axios.get(JOBS_API, {
       params: {  page: page, ...params },
+      headers:{
+        Authorization:"SuperSecretToken888"
+      }
       }).then(res => {
       dispatch({type: ACTIONS.GET_DATA, payload:{jobs: res.data}})
       console.log(res.data)
